@@ -1,7 +1,0 @@
-streamlit
-mne
-numpy
-scipy
-matplotlib
-plotly
-torch
