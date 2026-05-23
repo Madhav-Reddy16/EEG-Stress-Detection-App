@@ -17,10 +17,10 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 EEG Stress Detection using EEGNet")
+st.title("🧠 Real-Time EEG Stress Detection ")
 st.write(
-    "Upload a long-duration EEG EDF file. The system preprocesses the EEG signal, "
-    "divides it into 2-second epochs, predicts each epoch, and displays the final stress percentage."
+    " Upload EEG Signal"
+    " Pre Processing & Filtering, Epoch Segmentation, Stress Percentage Calculation,displays the final stress percentage."
 )
 
 # =====================================================
@@ -128,7 +128,7 @@ class EEGNet(nn.Module):
 
 @st.cache_resource
 def load_model():
-    checkpoint = torch.load(MODEL_PATH, map_location="cpu")
+    checkpoint = torch.load(MODEL_PATH, map_location="cpu", weights_only=False)
 
     model = EEGNet(
         n_classes=2,
