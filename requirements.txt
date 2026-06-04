@@ -3,4 +3,4 @@ numpy
 scipy
 mne
 torch
-pyedflib
+plotly
