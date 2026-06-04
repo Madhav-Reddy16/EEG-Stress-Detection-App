@@ -3,7 +3,6 @@ import numpy as np
 import mne
 import torch
 import torch.nn as nn
-import plotly.graph_objects as go
 import tempfile
 import os
 
@@ -94,11 +93,12 @@ class EEGNet(nn.Module):
         x = self.depthwiseConv(x)
         x = self.separableConv(x)
         x = x.reshape(x.size(0), -1)
-        return self.classifier(x)
+        x = self.classifier(x)
+        return x
 
 
 # =====================================================
-# UTILITY FUNCTIONS
+# FUNCTIONS
 # =====================================================
 def clean_channel_name(ch):
     return (
@@ -121,16 +121,29 @@ def apply_19ch_alias(ch):
 
 
 def load_model(model_path, chans, samples):
-    model = EEGNet(chans=chans, samples=samples, num_classes=2)
-
     if not os.path.exists(model_path):
         st.error(f"Model file not found: {model_path}")
         st.stop()
 
-    state = torch.load(model_path, map_location=torch.device("cpu"))
-    model.load_state_dict(state)
+    checkpoint = torch.load(model_path, map_location=torch.device("cpu"))
+
+    # Read saved metadata if available
+    saved_chans = checkpoint.get("n_channels", chans) if isinstance(checkpoint, dict) else chans
+    saved_samples = checkpoint.get("n_times", samples) if isinstance(checkpoint, dict) else samples
+
+    model = EEGNet(
+        chans=saved_chans,
+        samples=saved_samples,
+        num_classes=2
+    )
+
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        model.load_state_dict(checkpoint)
+
     model.eval()
-    return model
+    return model, saved_chans, saved_samples
 
 
 def get_stress_level(stress_percent):
@@ -144,72 +157,47 @@ def get_stress_level(stress_percent):
         return "Severe Stress", "🔴"
 
 
+def show_stress_visual(stress_percent):
+    st.metric("Stress Percentage", f"{stress_percent:.2f}%")
+    st.progress(int(stress_percent))
+
+
 def precautions_panel(level):
     if level == "Normal":
         st.success("""
-        ### 🟢 Precautions
-        Your EEG pattern indicates a normal stress range.
-
-        - Maintain regular sleep.
-        - Continue light exercise.
-        - Stay hydrated.
-        - Avoid unnecessary screen overload.
-        """)
+### 🟢 Normal Stress Precautions
+- Maintain regular sleep.
+- Continue light exercise.
+- Stay hydrated.
+- Avoid unnecessary screen overload.
+""")
 
     elif level == "Moderate Stress":
         st.warning("""
-        ### 🟡 Precautions
-        Mild stress indicators are detected.
-
-        - Take 5–10 minutes of breathing break.
-        - Reduce caffeine intake.
-        - Take short walking breaks.
-        - Avoid continuous screen exposure.
-        """)
+### 🟡 Moderate Stress Precautions
+- Take a 5–10 minute breathing break.
+- Reduce caffeine intake.
+- Take short walking breaks.
+- Avoid continuous screen exposure.
+""")
 
     elif level == "High Stress":
         st.error("""
-        ### 🟠 Precautions
-        High stress indicators are detected.
-
-        - Stop heavy work for a short time.
-        - Try deep breathing or meditation.
-        - Drink water and relax your body.
-        - Avoid multitasking.
-        """)
+### 🟠 High Stress Precautions
+- Stop heavy work for a short time.
+- Try deep breathing or meditation.
+- Drink water and relax your body.
+- Avoid multitasking.
+""")
 
     else:
         st.error("""
-        ### 🔴 Precautions
-        Severe stress indicators are detected.
-
-        - Take immediate rest.
-        - Avoid mental overload.
-        - Sit in a calm place.
-        - Consult a healthcare professional if this continues.
-        """)
-
-
-def stress_gauge(stress_percent):
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=stress_percent,
-        number={"suffix": "%"},
-        title={"text": "Stress Percentage"},
-        gauge={
-            "axis": {"range": [0, 100]},
-            "bar": {"color": "red"},
-            "steps": [
-                {"range": [0, 30], "color": "#b8f2c2"},
-                {"range": [30, 60], "color": "#fff3b0"},
-                {"range": [60, 80], "color": "#ffd6a5"},
-                {"range": [80, 100], "color": "#ffadad"}
-            ]
-        }
-    ))
-
-    fig.update_layout(height=350)
-    st.plotly_chart(fig, use_container_width=True)
+### 🔴 Severe Stress Precautions
+- Take immediate rest.
+- Sit in a calm place.
+- Avoid mental overload.
+- Consult a healthcare professional if stress continues.
+""")
 
 
 # =====================================================
@@ -229,10 +217,7 @@ if uploaded_file is not None:
         # =====================================================
         raw = mne.io.read_raw_edf(temp_path, preload=True, verbose=False)
 
-        # Clean names first
         raw.rename_channels(lambda ch: clean_channel_name(ch))
-
-        # Pick EEG only
         raw.pick_types(eeg=True)
 
         total_channels = len(raw.ch_names)
@@ -240,7 +225,7 @@ if uploaded_file is not None:
         st.info(f"Detected EEG channels: {total_channels}")
 
         # =====================================================
-        # SMART MODEL SELECTION
+        # MODEL SELECTION
         # =====================================================
         if total_channels < 19:
             st.error("Incompatible EEG file. Minimum 19 EEG channels are required.")
@@ -257,16 +242,14 @@ if uploaded_file is not None:
             model_path = MODEL_64_PATH
 
         # =====================================================
-        # FIRST CHANNEL CHECK
+        # CHANNEL CHECK
         # =====================================================
         missing_channels = [
             ch for ch in required_channels
             if ch not in raw.ch_names
         ]
 
-        # =====================================================
-        # ALIAS CONVERSION ONLY FOR 19CH MISMATCH
-        # =====================================================
+        # Alias conversion only for 19ch mismatch
         if selected_model_type == "19ch" and missing_channels:
             raw.rename_channels(lambda ch: apply_19ch_alias(ch))
 
@@ -275,27 +258,32 @@ if uploaded_file is not None:
                 if ch not in raw.ch_names
             ]
 
-        # =====================================================
-        # FINAL CHANNEL CHECK
-        # =====================================================
         if missing_channels:
             st.error("Prediction failed.")
             st.write(f"Selected model: {selected_model_type}")
-            st.write("Required trained channels are missing:")
+            st.write("Missing trained channels:")
             st.write(missing_channels)
             st.stop()
 
+        raw.pick_channels(required_channels)
+
         st.success(f"Compatible EEG file detected. Using {selected_model_type} model.")
 
-        # Keep only trained channels
-        raw.pick_channels(required_channels)
+        # =====================================================
+        # LOAD MODEL FIRST TO READ MODEL SHAPE
+        # =====================================================
+        model, model_chans, model_samples = load_model(
+            model_path=model_path,
+            chans=len(required_channels),
+            samples=256
+        )
 
         # =====================================================
         # PREPROCESSING
         # =====================================================
         TARGET_SFREQ = 128
         EPOCH_SECONDS = 2
-        TARGET_SAMPLES = TARGET_SFREQ * EPOCH_SECONDS
+        TARGET_SAMPLES = model_samples
 
         raw.resample(TARGET_SFREQ, verbose=False)
 
@@ -304,7 +292,6 @@ if uploaded_file is not None:
 
         data = raw.get_data()
 
-        # Normalize
         data = (data - np.mean(data, axis=1, keepdims=True)) / (
             np.std(data, axis=1, keepdims=True) + 1e-8
         )
@@ -313,7 +300,6 @@ if uploaded_file is not None:
         # EPOCHING
         # =====================================================
         epochs = []
-
         total_samples = data.shape[1]
 
         for start in range(0, total_samples - TARGET_SAMPLES + 1, TARGET_SAMPLES):
@@ -321,24 +307,26 @@ if uploaded_file is not None:
             epochs.append(epoch)
 
         if len(epochs) == 0:
-            st.error("EEG file duration is too short. Minimum 2 seconds required.")
+            st.error("EEG file duration is too short for prediction.")
             st.stop()
 
         epochs = np.array(epochs)
 
+        if epochs.shape[1] != model_chans:
+            st.error("Channel mismatch between uploaded EEG and trained model.")
+            st.write(f"EEG channels after selection: {epochs.shape[1]}")
+            st.write(f"Model expected channels: {model_chans}")
+            st.stop()
+
+        if epochs.shape[2] != model_samples:
+            st.error("Sample mismatch between uploaded EEG and trained model.")
+            st.write(f"Epoch samples: {epochs.shape[2]}")
+            st.write(f"Model expected samples: {model_samples}")
+            st.stop()
+
         st.write(f"Total 2-second epochs created: {len(epochs)}")
 
-        # Shape: epochs, 1, channels, samples
         X = torch.tensor(epochs, dtype=torch.float32).unsqueeze(1)
-
-        # =====================================================
-        # LOAD MODEL
-        # =====================================================
-        model = load_model(
-            model_path=model_path,
-            chans=len(required_channels),
-            samples=TARGET_SAMPLES
-        )
 
         # =====================================================
         # PREDICTION
@@ -346,35 +334,28 @@ if uploaded_file is not None:
         with torch.no_grad():
             outputs = model(X)
             probabilities = torch.softmax(outputs, dim=1)
-
             stress_probs = probabilities[:, 1].numpy()
             stress_percent = float(np.mean(stress_probs) * 100)
 
         level, icon = get_stress_level(stress_percent)
 
         # =====================================================
-        # DISPLAY RESULT
+        # RESULT DISPLAY
         # =====================================================
         st.divider()
 
-        col1, col2 = st.columns([1, 1])
+        col1, col2 = st.columns(2)
 
         with col1:
-            stress_gauge(stress_percent)
+            st.subheader("🧠 Stress Assessment")
+            show_stress_visual(stress_percent)
 
         with col2:
-            st.markdown(f"""
-            ## {icon} Final Result
-
-            ### Stress Level: **{level}**
-
-            ### Stress Percentage: **{stress_percent:.2f}%**
-
-            Model Used: **{selected_model_type} EEGNet**
-            """)
+            st.subheader(f"{icon} Final Result")
+            st.markdown(f"### Stress Level: **{level}**")
+            st.markdown(f"### Model Used: **{selected_model_type} EEGNet**")
 
         st.divider()
-
         precautions_panel(level)
 
     except Exception as e:
