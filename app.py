@@ -60,42 +60,39 @@ class EEGNet(nn.Module):
     def __init__(self, chans, samples, num_classes=2):
         super(EEGNet, self).__init__()
 
-        self.firstconv = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=(1, 64), padding=(0, 32), bias=False),
-            nn.BatchNorm2d(16)
-        )
-
-        self.depthwiseConv = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=(chans, 1), groups=16, bias=False),
-            nn.BatchNorm2d(32),
+        self.block1 = nn.Sequential(
+            nn.Conv2d(1, 8, kernel_size=(1, 64), padding=(0, 32), bias=False),
+            nn.BatchNorm2d(8),
+            nn.Conv2d(8, 16, kernel_size=(chans, 1), groups=8, bias=False),
+            nn.BatchNorm2d(16),
             nn.ELU(),
             nn.AvgPool2d(kernel_size=(1, 4)),
-            nn.Dropout(0.5)
+            nn.Dropout(0.25)
         )
 
-        self.separableConv = nn.Sequential(
-            nn.Conv2d(32, 32, kernel_size=(1, 16), padding=(0, 8), bias=False),
-            nn.BatchNorm2d(32),
+        self.block2 = nn.Sequential(
+            nn.Conv2d(16, 16, kernel_size=(1, 16), padding=(0, 8), groups=16, bias=False),
+            nn.Conv2d(16, 16, kernel_size=(1, 1), bias=False),
+            nn.BatchNorm2d(16),
             nn.ELU(),
             nn.AvgPool2d(kernel_size=(1, 8)),
-            nn.Dropout(0.5)
+            nn.Dropout(0.25)
         )
 
         with torch.no_grad():
             dummy = torch.zeros(1, 1, chans, samples)
-            out = self.separableConv(self.depthwiseConv(self.firstconv(dummy)))
-            self.flatten_size = out.shape[1] * out.shape[2] * out.shape[3]
+            out = self.block2(self.block1(dummy))
+            self.flatten_size = out.reshape(1, -1).shape[1]
 
         self.classifier = nn.Linear(self.flatten_size, num_classes)
 
     def forward(self, x):
-        x = self.firstconv(x)
-        x = self.depthwiseConv(x)
-        x = self.separableConv(x)
+        x = self.block1(x)
+        x = self.block2(x)
         x = x.reshape(x.size(0), -1)
         x = self.classifier(x)
         return x
-
+            
 
 # =====================================================
 # FUNCTIONS
@@ -121,11 +118,55 @@ def apply_19ch_alias(ch):
 
 
 def load_model(model_path, chans, samples):
+
     if not os.path.exists(model_path):
         st.error(f"Model file not found: {model_path}")
         st.stop()
 
-    checkpoint = torch.load(model_path, map_location=torch.device("cpu"))
+    checkpoint = torch.load(
+        model_path,
+        map_location=torch.device("cpu")
+    )
+
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+
+        state_dict = checkpoint["model_state_dict"]
+
+        saved_chans = checkpoint.get(
+            "n_channels",
+            chans
+        )
+
+        saved_samples = checkpoint.get(
+            "n_times",
+            samples
+        )
+
+    else:
+
+        state_dict = checkpoint
+
+        saved_chans = chans
+        saved_samples = samples
+
+    model = EEGNet(
+        chans=saved_chans,
+        samples=saved_samples,
+        num_classes=2
+    )
+
+    model.load_state_dict(
+        state_dict,
+        strict=True
+    )
+
+    model.eval()
+
+    return (
+        model,
+        saved_chans,
+        saved_samples
+    )
 
     # Read saved metadata if available
     saved_chans = checkpoint.get("n_channels", chans) if isinstance(checkpoint, dict) else chans
