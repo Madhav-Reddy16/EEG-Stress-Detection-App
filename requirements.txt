@@ -3,4 +3,3 @@ numpy
 scipy
 mne
 torch
-plotly
