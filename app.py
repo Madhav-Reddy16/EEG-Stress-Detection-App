@@ -75,12 +75,9 @@ class EEGNet(nn.Module):
 
 def clean_channel_name(ch):
     ch = ch.upper().strip()
-
-    # Remove common EEG prefixes
     ch = ch.replace("EEG ", "")
     ch = ch.replace("EEG", "")
 
-    # Remove reference suffixes
     reference_suffixes = [
         "-LE", "-REF", "-AVG", "-A1", "-A2",
         "_LE", "_REF", "_AVG", "_A1", "_A2",
@@ -90,7 +87,6 @@ def clean_channel_name(ch):
     for suffix in reference_suffixes:
         ch = ch.replace(suffix, "")
 
-    # Remove symbols
     ch = (
         ch.replace(".", "")
           .replace("-", "")
@@ -98,27 +94,7 @@ def clean_channel_name(ch):
           .replace(" ", "")
     )
 
-    # Final standard mapping
-    standard_map = {
-        "FP1": "FP1", "FP2": "FP2", "FPZ": "FPZ",
-        "AF7": "AF7", "AF3": "AF3", "AFZ": "AFZ", "AF4": "AF4", "AF8": "AF8",
-        "F7": "F7", "F5": "F5", "F3": "F3", "F1": "F1", "FZ": "FZ",
-        "F2": "F2", "F4": "F4", "F6": "F6", "F8": "F8",
-        "FT7": "FT7", "FC5": "FC5", "FC3": "FC3", "FC1": "FC1",
-        "FCZ": "FCZ", "FC2": "FC2", "FC4": "FC4", "FC6": "FC6", "FT8": "FT8",
-        "T3": "T3", "T4": "T4", "T5": "T5", "T6": "T6",
-        "T7": "T7", "T8": "T8", "T9": "T9", "T10": "T10",
-        "C5": "C5", "C3": "C3", "C1": "C1", "CZ": "CZ",
-        "C2": "C2", "C4": "C4", "C6": "C6",
-        "TP7": "TP7", "CP5": "CP5", "CP3": "CP3", "CP1": "CP1",
-        "CPZ": "CPZ", "CP2": "CP2", "CP4": "CP4", "CP6": "CP6", "TP8": "TP8",
-        "P7": "P7", "P5": "P5", "P3": "P3", "P1": "P1",
-        "PZ": "PZ", "P2": "P2", "P4": "P4", "P6": "P6", "P8": "P8",
-        "PO7": "PO7", "PO3": "PO3", "POZ": "POZ", "PO4": "PO4", "PO8": "PO8",
-        "O1": "O1", "OZ": "OZ", "O2": "O2", "IZ": "IZ"
-    }
-
-    return standard_map.get(ch, ch)
+    return ch
 
 
 def apply_19ch_alias(ch):
@@ -232,25 +208,23 @@ if uploaded_file is not None:
         raw.pick_types(eeg=True)
         raw.rename_channels(lambda ch: clean_channel_name(ch))
 
-raw.pick_types(eeg=True)
+        reference_channels = [
+            "A1", "A2",
+            "A1A2", "A2A1",
+            "M1", "M2",
+            "REF", "AVG",
+            "ECG", "EKG",
+            "EOG", "HEOG", "VEOG",
+            "EMG"
+        ]
 
-reference_channels = [
-    "A1", "A2",
-    "A1A2", "A2A1",
-    "M1", "M2",
-    "REF", "AVG",
-    "ECG", "EKG",
-    "EOG", "HEOG", "VEOG",
-    "EMG"
-]
+        channels_to_remove = [
+            ch for ch in raw.ch_names
+            if ch in reference_channels
+        ]
 
-channels_to_remove = [
-    ch for ch in raw.ch_names
-    if ch in reference_channels
-]
-
-if channels_to_remove:
-    raw.drop_channels(channels_to_remove)
+        if channels_to_remove:
+            raw.drop_channels(channels_to_remove)
 
         total_channels = len(raw.ch_names)
         st.info(f"Detected EEG channels: {total_channels}")
@@ -264,16 +238,17 @@ if channels_to_remove:
             required_channels = CHANNELS_19
             model_path = MODEL_19_PATH
 
+            raw.rename_channels(lambda ch: apply_19ch_alias(ch))
+
         else:
             selected_model_type = "64ch"
             required_channels = CHANNELS_64
             model_path = MODEL_64_PATH
 
-        missing_channels = [ch for ch in required_channels if ch not in raw.ch_names]
-
-        if selected_model_type == "19ch" and missing_channels:
-            raw.rename_channels(lambda ch: apply_19ch_alias(ch))
-            missing_channels = [ch for ch in required_channels if ch not in raw.ch_names]
+        missing_channels = [
+            ch for ch in required_channels
+            if ch not in raw.ch_names
+        ]
 
         if missing_channels:
             st.error("Prediction failed. Required trained channels are missing.")
