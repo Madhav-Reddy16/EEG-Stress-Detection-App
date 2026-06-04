@@ -95,7 +95,71 @@ def clean_channel_name(ch):
     )
 
     return ch
+def adapt_64ch_channels(raw, required_channels):
+    """
+    Smart 64-channel adaptation:
+    - Cleans channel names
+    - Removes reference/non-EEG channels
+    - Applies aliases only when required channels are missing
+    - Reorders channels according to trained 64ch model
+    """
 
+    raw.rename_channels(lambda ch: clean_channel_name(ch))
+
+    reference_channels = [
+        "A1", "A2", "A1A2", "A2A1",
+        "M1", "M2",
+        "REF", "LE", "AVG",
+        "ECG", "EKG",
+        "EOG", "HEOG", "VEOG",
+        "EMG", "STI", "STIM", "STATUS"
+    ]
+
+    channels_to_remove = [
+        ch for ch in raw.ch_names
+        if ch in reference_channels
+    ]
+
+    if channels_to_remove:
+        raw.drop_channels(channels_to_remove)
+
+    raw.rename_channels(lambda ch: clean_channel_name(ch))
+
+    missing_channels = [
+        ch for ch in required_channels
+        if ch not in raw.ch_names
+    ]
+
+    if not missing_channels:
+        raw.pick_channels(required_channels)
+        return raw, []
+
+    alias_64 = {
+        "T3": "T7",
+        "T4": "T8",
+        "T5": "P7",
+        "T6": "P8"
+    }
+
+    rename_dict = {}
+
+    for old_ch, new_ch in alias_64.items():
+        if old_ch in raw.ch_names and new_ch in required_channels and new_ch not in raw.ch_names:
+            rename_dict[old_ch] = new_ch
+
+    if rename_dict:
+        raw.rename_channels(rename_dict)
+
+    missing_channels = [
+        ch for ch in required_channels
+        if ch not in raw.ch_names
+    ]
+
+    if missing_channels:
+        return raw, missing_channels
+
+    raw.pick_channels(required_channels)
+    return raw, []
 
 def apply_19ch_alias(ch):
     alias_map = {
@@ -105,6 +169,15 @@ def apply_19ch_alias(ch):
         "P8": "T6"
     }
     return alias_map.get(ch, ch)
+    
+def apply_64ch_alias(ch):
+    alias_map = {
+        "T3": "T7",
+        "T4": "T8",
+        "T5": "P7",
+        "T6": "P8"
+    }
+    return alias_map.get(ch, ch)    
 
 
 def load_model(model_path):
@@ -240,23 +313,30 @@ if uploaded_file is not None:
 
             raw.rename_channels(lambda ch: apply_19ch_alias(ch))
 
-        else:
-            selected_model_type = "64ch"
-            required_channels = CHANNELS_64
-            model_path = MODEL_64_PATH
+      else:
+          selected_model_type = "64ch"
+          required_channels = CHANNELS_64
+          model_path = MODEL_64_PATH
 
-        missing_channels = [
-            ch for ch in required_channels
-            if ch not in raw.ch_names
-        ]
+    raw, missing_channels = adapt_64ch_channels(raw, required_channels)
 
-        if missing_channels:
-            st.error("Prediction failed. Required trained channels are missing.")
-            st.write(f"Selected model: {selected_model_type}")
-            st.write(missing_channels)
-            st.stop()
+        if selected_model_type != "64ch":
+    missing_channels = [
+        ch for ch in required_channels
+        if ch not in raw.ch_names
+    ]
 
-        raw.pick_channels(required_channels)
+if missing_channels:
+    st.error("Prediction failed. Required trained channels are missing.")
+    st.write(f"Selected model: {selected_model_type}")
+    st.write("Available channels after cleaning:")
+    st.write(raw.ch_names)
+    st.write("Missing channels:")
+    st.write(missing_channels)
+    st.stop()
+
+if selected_model_type != "64ch":
+    raw.pick_channels(required_channels)
 
         model, model_channels, model_samples, model_sfreq = load_model(model_path)
 
