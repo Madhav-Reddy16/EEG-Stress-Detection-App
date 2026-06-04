@@ -302,7 +302,7 @@ if uploaded_file is not None:
         total_channels = len(raw.ch_names)
         st.info(f"Detected EEG channels: {total_channels}")
 
-        if total_channels < 19:
+               if total_channels < 19:
             st.error("Incompatible EEG file. Minimum 19 EEG channels required.")
             st.stop()
 
@@ -313,28 +313,38 @@ if uploaded_file is not None:
 
             raw.rename_channels(lambda ch: apply_19ch_alias(ch))
 
-      else:
-          selected_model_type = "64ch"
-          required_channels = CHANNELS_64
-          model_path = MODEL_64_PATH
+            missing_channels = [
+                ch for ch in required_channels
+                if ch not in raw.ch_names
+            ]
 
-    raw, missing_channels = adapt_64ch_channels(raw, required_channels)
+            if missing_channels:
+                st.error("Prediction failed. Required trained channels are missing.")
+                st.write(f"Selected model: {selected_model_type}")
+                st.write("Available channels after cleaning:")
+                st.write(raw.ch_names)
+                st.write("Missing channels:")
+                st.write(missing_channels)
+                st.stop()
 
-        if selected_model_type != "64ch":
-    missing_channels = [
-        ch for ch in required_channels
-        if ch not in raw.ch_names
-    ]
+            raw.pick_channels(required_channels)
 
-if missing_channels:
-    st.error("Prediction failed. Required trained channels are missing.")
-    st.write(f"Selected model: {selected_model_type}")
-    st.write("Available channels after cleaning:")
-    st.write(raw.ch_names)
-    st.write("Missing channels:")
-    st.write(missing_channels)
-    st.stop()
+        else:
+            selected_model_type = "64ch"
+            required_channels = CHANNELS_64
+            model_path = MODEL_64_PATH
 
+            raw, missing_channels = adapt_64ch_channels(raw, required_channels)
+
+            if missing_channels:
+                st.error("Prediction failed. Required trained channels are missing.")
+                st.write(f"Selected model: {selected_model_type}")
+                st.write("Available channels after cleaning:")
+                st.write(raw.ch_names)
+                st.write("Missing channels:")
+                st.write(missing_channels)
+                st.stop()
+                
 if selected_model_type != "64ch":
     raw.pick_channels(required_channels)
 
