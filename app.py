@@ -155,7 +155,6 @@ def adapt_64ch_channels(raw, required_channels):
     raw.pick_channels(required_channels)
     return raw, []
 
-
 def load_model(model_path):
     if not os.path.exists(model_path):
         st.error(f"Model file not found: {model_path}")
@@ -169,11 +168,9 @@ def load_model(model_path):
             or checkpoint.get("model_state_dict")
             or checkpoint
         )
-        n_times = checkpoint.get("n_times", 256)
         sfreq = checkpoint.get("sfreq", 128)
     else:
         state_dict = checkpoint
-        n_times = 256
         sfreq = 128
 
     F1 = state_dict["block1.0.weight"].shape[0]
@@ -183,9 +180,34 @@ def load_model(model_path):
     F2 = state_dict["block2.1.weight"].shape[0]
     D = depth_filters // F1
 
+    expected_features = state_dict["classifier.weight"].shape[1]
+
+    possible_samples = [128, 256, 512, 1024]
+
+    correct_samples = None
+
+    for samples in possible_samples:
+        temp_model = EEGNet(
+            chans=n_channels,
+            samples=samples,
+            num_classes=2,
+            F1=F1,
+            D=D,
+            F2=F2,
+            kern_length=kern_length
+        )
+
+        if temp_model.classifier.in_features == expected_features:
+            correct_samples = samples
+            break
+
+    if correct_samples is None:
+        st.error("Could not detect model input sample size.")
+        st.stop()
+
     model = EEGNet(
         chans=n_channels,
-        samples=n_times,
+        samples=correct_samples,
         num_classes=2,
         F1=F1,
         D=D,
@@ -196,8 +218,7 @@ def load_model(model_path):
     model.load_state_dict(state_dict, strict=True)
     model.eval()
 
-    return model, n_channels, n_times, sfreq
-
+    return model, n_channels, correct_samples, sfreq
 
 def get_stress_level(stress_percent):
     if stress_percent <= 30:
