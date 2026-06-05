@@ -35,6 +35,15 @@ CHANNELS_64 = [
     "O1", "OZ", "O2", "IZ"
 ]
 
+REFERENCE_CHANNELS = [
+    "A1", "A2", "A1A2", "A2A1",
+    "M1", "M2",
+    "REF", "LE", "AVG",
+    "ECG", "EKG",
+    "EOG", "HEOG", "VEOG",
+    "EMG", "STI", "STIM", "STATUS"
+]
+
 
 class EEGNet(nn.Module):
     def __init__(self, chans, samples, num_classes=2, F1=16, D=2, F2=32, kern_length=64):
@@ -104,38 +113,49 @@ def apply_19ch_alias(ch):
         "P8": "T6"
     }
     return alias_map.get(ch, ch)
-def adapt_19ch_flexible(raw, required_channels):
-    """
-    19ch flexible adaptation:
-    1. If all trained channels are available, process normally.
-    2. If some trained channels are missing, use available channels and fill missing channels with zeros.
-    """
+
+
+def clean_and_remove_reference(raw):
+    raw.rename_channels(lambda ch: clean_channel_name(ch))
+    raw.pick_types(eeg=True)
+    raw.rename_channels(lambda ch: clean_channel_name(ch))
+
+    channels_to_remove = [ch for ch in raw.ch_names if ch in REFERENCE_CHANNELS]
+    if channels_to_remove:
+        raw.drop_channels(channels_to_remove)
 
     raw.rename_channels(lambda ch: clean_channel_name(ch))
-    raw.rename_channels(lambda ch: apply_19ch_alias(ch))
+    return raw
 
-    available_channels = [
-        ch for ch in required_channels
-        if ch in raw.ch_names
-    ]
 
-    missing_channels = [
-        ch for ch in required_channels
-        if ch not in raw.ch_names
-    ]
+def adapt_19ch_flexible(raw, required_channels):
+    """
+    If all trained 19 channels exist, process normally.
+    If some are missing, use available trained channels and fill missing channels with zeros.
+    """
+    raw.rename_channels(lambda ch: clean_channel_name(ch))
 
-    # Case 1: all required channels are available
+    rename_dict = {}
+    for old_ch in raw.ch_names:
+        new_ch = apply_19ch_alias(old_ch)
+        if old_ch != new_ch and new_ch not in raw.ch_names:
+            rename_dict[old_ch] = new_ch
+
+    if rename_dict:
+        raw.rename_channels(rename_dict)
+
+    available_channels = [ch for ch in required_channels if ch in raw.ch_names]
+    missing_channels = [ch for ch in required_channels if ch not in raw.ch_names]
+
     if len(missing_channels) == 0:
         raw.pick_channels(required_channels)
         return raw, missing_channels, "normal"
 
-    # Case 2: some channels are missing
     if len(available_channels) == 0:
         return raw, missing_channels, "failed"
 
     data = raw.get_data(picks=available_channels)
     sfreq = raw.info["sfreq"]
-
     full_data = np.zeros((len(required_channels), data.shape[1]))
 
     for i, ch in enumerate(required_channels):
@@ -143,40 +163,14 @@ def adapt_19ch_flexible(raw, required_channels):
             src_idx = available_channels.index(ch)
             full_data[i] = data[src_idx]
 
-    info = mne.create_info(
-        ch_names=required_channels,
-        sfreq=sfreq,
-        ch_types="eeg"
-    )
-
+    info = mne.create_info(ch_names=required_channels, sfreq=sfreq, ch_types="eeg")
     new_raw = mne.io.RawArray(full_data, info, verbose=False)
 
     return new_raw, missing_channels, "partial"
 
+
 def adapt_64ch_channels(raw, required_channels):
     raw.rename_channels(lambda ch: clean_channel_name(ch))
-
-    reference_channels = [
-        "A1", "A2", "A1A2", "A2A1",
-        "M1", "M2",
-        "REF", "LE", "AVG",
-        "ECG", "EKG",
-        "EOG", "HEOG", "VEOG",
-        "EMG", "STI", "STIM", "STATUS"
-    ]
-
-    channels_to_remove = [ch for ch in raw.ch_names if ch in reference_channels]
-
-    if channels_to_remove:
-        raw.drop_channels(channels_to_remove)
-
-    raw.rename_channels(lambda ch: clean_channel_name(ch))
-
-    missing_channels = [ch for ch in required_channels if ch not in raw.ch_names]
-
-    if not missing_channels:
-        raw.pick_channels(required_channels)
-        return raw, []
 
     alias_64 = {
         "T3": "T7",
@@ -186,7 +180,6 @@ def adapt_64ch_channels(raw, required_channels):
     }
 
     rename_dict = {}
-
     for old_ch, new_ch in alias_64.items():
         if old_ch in raw.ch_names and new_ch in required_channels and new_ch not in raw.ch_names:
             rename_dict[old_ch] = new_ch
@@ -201,6 +194,7 @@ def adapt_64ch_channels(raw, required_channels):
 
     raw.pick_channels(required_channels)
     return raw, []
+
 
 def load_model(model_path):
     if not os.path.exists(model_path):
@@ -226,11 +220,9 @@ def load_model(model_path):
     n_channels = state_dict["block1.2.weight"].shape[2]
     F2 = state_dict["block2.1.weight"].shape[0]
     D = depth_filters // F1
-
     expected_features = state_dict["classifier.weight"].shape[1]
 
-    possible_samples = [128, 256, 512, 1024]
-
+    possible_samples = [64, 128, 256, 512, 1024, 2048]
     correct_samples = None
 
     for samples in possible_samples:
@@ -266,6 +258,7 @@ def load_model(model_path):
     model.eval()
 
     return model, n_channels, correct_samples, sfreq
+
 
 def get_stress_level(stress_percent):
     if stress_percent <= 30:
@@ -316,79 +309,54 @@ def precautions_panel(level):
 uploaded_file = st.file_uploader("Upload EEG EDF File", type=["edf"])
 
 if uploaded_file is not None:
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".edf") as tmp:
         tmp.write(uploaded_file.read())
         temp_path = tmp.name
 
     try:
         raw = mne.io.read_raw_edf(temp_path, preload=True, verbose=False)
-
-        raw.rename_channels(lambda ch: clean_channel_name(ch))
-        raw.pick_types(eeg=True)
-        raw.rename_channels(lambda ch: clean_channel_name(ch))
-
-        reference_channels = [
-            "A1", "A2", "A1A2", "A2A1",
-            "M1", "M2",
-            "REF", "LE", "AVG",
-            "ECG", "EKG",
-            "EOG", "HEOG", "VEOG",
-            "EMG", "STI", "STIM", "STATUS"
-        ]
-
-        channels_to_remove = [ch for ch in raw.ch_names if ch in reference_channels]
-
-        if channels_to_remove:
-            raw.drop_channels(channels_to_remove)
+        raw = clean_and_remove_reference(raw)
 
         total_channels = len(raw.ch_names)
         st.info(f"Detected EEG channels after cleaning: {total_channels}")
 
-        if total_channels < 19:
-            st.error("Incompatible EEG file. Minimum 19 EEG channels required.")
-            st.stop()
+        selected_model_type = None
+        required_channels = None
+        model_path = None
+        missing_channels = []
 
-        elif 19 <= total_channels < 60:
+        raw_64_test = raw.copy()
+        raw_64_test, missing_64 = adapt_64ch_channels(raw_64_test, CHANNELS_64)
 
-    selected_model_type = "19ch"
-    required_channels = CHANNELS_19
-    model_path = MODEL_19_PATH
-
-    raw, missing_channels, channel_mode = adapt_19ch_flexible(
-        raw,
-        required_channels
-    )
-
-    if channel_mode == "normal":
-        st.success("All trained 19 channels are available. Processing normally.")
-
-    elif channel_mode == "partial":
-        st.warning(
-            f"{len(missing_channels)} trained channels are missing. "
-            "Prediction is based on available EEG channels only."
-        )
-        st.write("Missing channels filled with zeros:")
-        st.write(missing_channels)
-
-    else:
-        st.error("Prediction failed. No compatible trained channels were found.")
-        st.stop()
-
-    else:
+        if len(missing_64) == 0:
             selected_model_type = "64ch"
             required_channels = CHANNELS_64
             model_path = MODEL_64_PATH
+            raw = raw_64_test
+            st.success("All trained 64 channels are available. Processing normally.")
 
-            raw, missing_channels = adapt_64ch_channels(raw, required_channels)
+        else:
+            selected_model_type = "19ch"
+            required_channels = CHANNELS_19
+            model_path = MODEL_19_PATH
 
-   if missing_channels:
-                st.error("Prediction failed. Required trained channels are missing.")
-                st.write(f"Selected model: {selected_model_type}")
+            raw, missing_channels, channel_mode = adapt_19ch_flexible(raw, required_channels)
+
+            if channel_mode == "normal":
+                st.success("All trained 19 channels are available. Processing normally.")
+
+            elif channel_mode == "partial":
+                st.warning(
+                    f"{len(missing_channels)} trained 19-channel electrodes are missing. "
+                    "Prediction is based on available EEG channels and zero-filled missing channels."
+                )
+                st.write("Missing channels filled with zeros:")
+                st.write(missing_channels)
+
+            else:
+                st.error("Prediction failed. No compatible trained EEG channels were found.")
                 st.write("Available channels after cleaning:")
                 st.write(raw.ch_names)
-                st.write("Missing channels:")
-                st.write(missing_channels)
                 st.stop()
 
         model, model_channels, model_samples, model_sfreq = load_model(model_path)
@@ -398,7 +366,6 @@ if uploaded_file is not None:
         raw.notch_filter(50, verbose=False)
 
         data = raw.get_data()
-
         data = (data - np.mean(data, axis=1, keepdims=True)) / (
             np.std(data, axis=1, keepdims=True) + 1e-8
         )
@@ -411,7 +378,7 @@ if uploaded_file is not None:
             epochs.append(epoch)
 
         if len(epochs) == 0:
-            st.error("EEG file is too short. Minimum 2 seconds required.")
+            st.error("EEG file is too short for the trained model input length.")
             st.stop()
 
         epochs = np.array(epochs)
@@ -433,7 +400,7 @@ if uploaded_file is not None:
         level, icon = get_stress_level(stress_percent)
 
         st.success(f"Compatible EEG file detected. Using {selected_model_type} model.")
-        st.write(f"Total 2-second epochs created: {len(epochs)}")
+        st.write(f"Total epochs created: {len(epochs)}")
 
         st.divider()
 
