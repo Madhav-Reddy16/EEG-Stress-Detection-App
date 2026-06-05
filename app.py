@@ -37,23 +37,23 @@ CHANNELS_64 = [
 
 
 class EEGNet(nn.Module):
-    def __init__(self, chans, samples, num_classes=2):
+    def __init__(self, chans, samples, num_classes=2, F1=16, D=2, F2=32, kern_length=64):
         super().__init__()
 
         self.block1 = nn.Sequential(
-            nn.Conv2d(1, 8, kernel_size=(1, 128), padding=(0, 64), bias=False),
-            nn.BatchNorm2d(8),
-            nn.Conv2d(8, 16, kernel_size=(chans, 1), groups=8, bias=False),
-            nn.BatchNorm2d(16),
+            nn.Conv2d(1, F1, kernel_size=(1, kern_length), padding=(0, kern_length // 2), bias=False),
+            nn.BatchNorm2d(F1),
+            nn.Conv2d(F1, F1 * D, kernel_size=(chans, 1), groups=F1, bias=False),
+            nn.BatchNorm2d(F1 * D),
             nn.ELU(),
             nn.AvgPool2d(kernel_size=(1, 4)),
             nn.Dropout(0.25)
         )
 
         self.block2 = nn.Sequential(
-            nn.Conv2d(16, 16, kernel_size=(1, 16), padding=(0, 8), groups=16, bias=False),
-            nn.Conv2d(16, 16, kernel_size=(1, 1), bias=False),
-            nn.BatchNorm2d(16),
+            nn.Conv2d(F1 * D, F1 * D, kernel_size=(1, 16), padding=(0, 8), groups=F1 * D, bias=False),
+            nn.Conv2d(F1 * D, F2, kernel_size=(1, 1), bias=False),
+            nn.BatchNorm2d(F2),
             nn.ELU(),
             nn.AvgPool2d(kernel_size=(1, 4)),
             nn.Dropout(0.25)
@@ -75,8 +75,7 @@ class EEGNet(nn.Module):
 
 def clean_channel_name(ch):
     ch = ch.upper().strip()
-    ch = ch.replace("EEG ", "")
-    ch = ch.replace("EEG", "")
+    ch = ch.replace("EEG ", "").replace("EEG", "")
 
     reference_suffixes = [
         "-LE", "-REF", "-AVG", "-A1", "-A2",
@@ -95,15 +94,19 @@ def clean_channel_name(ch):
     )
 
     return ch
-def adapt_64ch_channels(raw, required_channels):
-    """
-    Smart 64-channel adaptation:
-    - Cleans channel names
-    - Removes reference/non-EEG channels
-    - Applies aliases only when required channels are missing
-    - Reorders channels according to trained 64ch model
-    """
 
+
+def apply_19ch_alias(ch):
+    alias_map = {
+        "T7": "T3",
+        "T8": "T4",
+        "P7": "T5",
+        "P8": "T6"
+    }
+    return alias_map.get(ch, ch)
+
+
+def adapt_64ch_channels(raw, required_channels):
     raw.rename_channels(lambda ch: clean_channel_name(ch))
 
     reference_channels = [
@@ -115,20 +118,14 @@ def adapt_64ch_channels(raw, required_channels):
         "EMG", "STI", "STIM", "STATUS"
     ]
 
-    channels_to_remove = [
-        ch for ch in raw.ch_names
-        if ch in reference_channels
-    ]
+    channels_to_remove = [ch for ch in raw.ch_names if ch in reference_channels]
 
     if channels_to_remove:
         raw.drop_channels(channels_to_remove)
 
     raw.rename_channels(lambda ch: clean_channel_name(ch))
 
-    missing_channels = [
-        ch for ch in required_channels
-        if ch not in raw.ch_names
-    ]
+    missing_channels = [ch for ch in required_channels if ch not in raw.ch_names]
 
     if not missing_channels:
         raw.pick_channels(required_channels)
@@ -150,34 +147,13 @@ def adapt_64ch_channels(raw, required_channels):
     if rename_dict:
         raw.rename_channels(rename_dict)
 
-    missing_channels = [
-        ch for ch in required_channels
-        if ch not in raw.ch_names
-    ]
+    missing_channels = [ch for ch in required_channels if ch not in raw.ch_names]
 
     if missing_channels:
         return raw, missing_channels
 
     raw.pick_channels(required_channels)
     return raw, []
-
-def apply_19ch_alias(ch):
-    alias_map = {
-        "T7": "T3",
-        "T8": "T4",
-        "P7": "T5",
-        "P8": "T6"
-    }
-    return alias_map.get(ch, ch)
-    
-def apply_64ch_alias(ch):
-    alias_map = {
-        "T3": "T7",
-        "T4": "T8",
-        "T5": "P7",
-        "T6": "P8"
-    }
-    return alias_map.get(ch, ch)    
 
 
 def load_model(model_path):
@@ -193,25 +169,28 @@ def load_model(model_path):
             or checkpoint.get("model_state_dict")
             or checkpoint
         )
-
-        n_channels = checkpoint.get("n_channels", None)
         n_times = checkpoint.get("n_times", 256)
         sfreq = checkpoint.get("sfreq", 128)
-
     else:
         state_dict = checkpoint
-        n_channels = None
         n_times = 256
         sfreq = 128
 
-    if n_channels is None:
-        first_weight = state_dict["block1.2.weight"]
-        n_channels = first_weight.shape[2]
+    F1 = state_dict["block1.0.weight"].shape[0]
+    kern_length = state_dict["block1.0.weight"].shape[3]
+    depth_filters = state_dict["block1.2.weight"].shape[0]
+    n_channels = state_dict["block1.2.weight"].shape[2]
+    F2 = state_dict["block2.1.weight"].shape[0]
+    D = depth_filters // F1
 
     model = EEGNet(
         chans=n_channels,
         samples=n_times,
-        num_classes=2
+        num_classes=2,
+        F1=F1,
+        D=D,
+        F2=F2,
+        kern_length=kern_length
     )
 
     model.load_state_dict(state_dict, strict=True)
@@ -282,27 +261,23 @@ if uploaded_file is not None:
         raw.rename_channels(lambda ch: clean_channel_name(ch))
 
         reference_channels = [
-            "A1", "A2",
-            "A1A2", "A2A1",
+            "A1", "A2", "A1A2", "A2A1",
             "M1", "M2",
-            "REF", "AVG",
+            "REF", "LE", "AVG",
             "ECG", "EKG",
             "EOG", "HEOG", "VEOG",
-            "EMG"
+            "EMG", "STI", "STIM", "STATUS"
         ]
 
-        channels_to_remove = [
-            ch for ch in raw.ch_names
-            if ch in reference_channels
-        ]
+        channels_to_remove = [ch for ch in raw.ch_names if ch in reference_channels]
 
         if channels_to_remove:
             raw.drop_channels(channels_to_remove)
 
         total_channels = len(raw.ch_names)
-        st.info(f"Detected EEG channels: {total_channels}")
+        st.info(f"Detected EEG channels after cleaning: {total_channels}")
 
-               if total_channels < 19:
+        if total_channels < 19:
             st.error("Incompatible EEG file. Minimum 19 EEG channels required.")
             st.stop()
 
@@ -313,10 +288,7 @@ if uploaded_file is not None:
 
             raw.rename_channels(lambda ch: apply_19ch_alias(ch))
 
-            missing_channels = [
-                ch for ch in required_channels
-                if ch not in raw.ch_names
-            ]
+            missing_channels = [ch for ch in required_channels if ch not in raw.ch_names]
 
             if missing_channels:
                 st.error("Prediction failed. Required trained channels are missing.")
@@ -344,9 +316,6 @@ if uploaded_file is not None:
                 st.write("Missing channels:")
                 st.write(missing_channels)
                 st.stop()
-                
-if selected_model_type != "64ch":
-    raw.pick_channels(required_channels)
 
         model, model_channels, model_samples, model_sfreq = load_model(model_path)
 
