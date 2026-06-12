@@ -1,4 +1,4 @@
-# 🧠 Adaptive EEG Stress Detection System
+# 🧠 AI-Driven Biomedical Stress Detection using Adaptive EEG Channel Processing and Deep Learning
 
 ## Overview
 
@@ -34,196 +34,152 @@ Upload EEG (.edf)
 → Stress Probability Estimation
 → Final Stress Assessment
 
----
+========================================================================
+                          SYSTEM ARCHITECTURE                           
+========================================================================
+
+┌────────────────────────────────────────────────────────┐
+│                      EEG EDF FILE                      │
+│                (19CH / 64CH / Other Data)              │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                 EEG DATA ACQUISITION                   │
+│                   EDF File Reader                      │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                CHANNEL DETECTION MODULE                │
+│              Detects Available EEG Channels            │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                ADAPTIVE CHANNEL ENGINE                 │
+│         • Dynamically Selects 19CH / 64CH              │
+│         • Handles Missing Channels Automatically       │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                   EEG PREPROCESSING                    │
+│         • Resampling (Target: 256 Hz)                  │
+│         • Artifact Removal                             │
+│         • Bandpass Filtering (1 - 40 Hz)               │
+│         • Notch Filtering (50 Hz)                      │
+│         • Amplitude Normalization                      │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                2-SECOND EPOCH CREATION                 │
+│         Generates Fixed-Length Segment Samples         │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                    EEGNET INFERENCE                    │
+│             Applies 19CH Model / 64CH Model            │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│              STRESS PROBABILITY CALCULATION            │
+│         Computes Epoch-wise Prediction Scores          │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                STRESS LEVEL ESTIMATION                 │
+│       Classifies: Normal / Moderate / High / Severe    │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                STREAMLIT VISUALIZATION                 │
+│         Displays Stress % and Recommendations          │
+└────────────────────────────────────────────────────────┘
+
+
+=========================================================================
+                        ADAPTIVE CHANNEL PIPELINE                        
+=========================================================================
+
+┌─────────────────────────────────────────────────────────┐
+│                      EEG EDF FILE                       │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                Detect Available Channels                │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                Remove Reference Channels                │
+│           (A1,A2,M1,M2,EOG,ECG,EMG,REF...)              │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                Standardize Channel Names                │
+│            (Fp1→FP1, EEG FP1-REF→FP1, etc.)             │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                   Count EEG Channels                    │
+└────────────────────────────┬────────────────────────────┘
+                             │
+             ┌───────────────┴───────────────┐
+             │                               │
+             ▼                               ▼
+ ┌───────────────────────┐       ┌───────────────────────┐
+ │     Channels ≥ 64     │       │  19 ≤ Channels < 64   │
+ └───────────┬───────────┘       └───────────┬───────────┘
+             │                               │
+             ▼                               ▼
+ ┌───────────────────────┐       ┌───────────────────────┐
+ │   Select 64CH Model   │       │   Select 19CH Model   │
+ └───────────┬───────────┘       └───────────┬───────────┘
+             │                               │
+             └───────────────┬───────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                 Check Required Channels                 │
+└────────────────────────────┬────────────────────────────┘
+                             │
+             ┌───────────────┴───────────────┐
+             │                               │
+             ▼                               ▼
+ ┌───────────────────────┐       ┌───────────────────────┐
+ │All Channels Available │       │   Missing Channels    │
+ │   Normal Processing   │       │Use Available Channels │
+ │                       │       │   Adaptive Mapping    │
+ │                       │       │  Missing CH Ignored   │
+ └───────────┬───────────┘       └───────────┬───────────┘
+             │                               │
+             └───────────────┬───────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                    EEG Preprocessing                    │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                    EEGNet Prediction                    │
+└────────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Stress Percentage                    │
+└─────────────────────────────────────────────────────────┘
 
-## System Architecture
 
-┌──────────────────────────┐
-
-│      EEG EDF FILE        │
-
-│   (19CH / 64CH / Other)  │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│   EEG Data Acquisition   │
-
-│      EDF File Reader     │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│ Channel Detection Module │
-
-│  Detect Available EEG CH │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│ Adaptive Channel Engine  │
-
-│ 19CH / 64CH Selection    │
-
-│ Missing CH Handling      │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│   EEG Preprocessing      │
-
-│ • Resampling (256 Hz)    │
-
-│ • Artifact Removal       │
-
-│ • Bandpass 1-40 Hz       │
-
-│ • Notch 50 Hz            │
-
-│ • Normalization          │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│ 2-Second Epoch Creation  │
-
-│  Fixed Length Samples    │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│    EEGNet Inference      │
-
-│ 19CH Model / 64CH Model  │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│ Stress Probability Calc  │
-
-│ Epoch-wise Prediction    │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│ Stress Level Estimation  │
-
-│ Normal / Moderate / High │
-
-│       / Severe           │
-
-└────────────┬─────────────┘
-
-             │
-
-             ▼
-
-┌──────────────────────────┐
-
-│ Streamlit Visualization  │
-
-│ Stress % + Recommendations│
-
-└──────────────────────────┘
-
----
-
-## Adaptive Channel Pipeline
-
-```
-         EEG EDF FILE
-                │
-                ▼
-   Detect Available Channels
-                │
-                ▼
-   Remove Reference Channels
-```
-
-(A1,A2,M1,M2,EOG,ECG,EMG,REF...)
-│
-▼
-Standardize Channel Names
-(Fp1→FP1, EEG FP1-REF→FP1, etc.)
-│
-▼
-Count EEG Channels
-│
-┌───────────┼───────────┐
-│                       │
-▼                       ▼
-Channels ≥ 64          19 ≤ Channels < 64
-│                       │
-▼                       ▼
-Select 64CH Model      Select 19CH Model
-│                       │
-└───────────┬───────────┘
-│
-▼
-Check Required Channels
-│
-┌─────────────┴─────────────┐
-│                           │
-▼                           ▼
-All Channels Available    Missing Channels
-│                           │
-▼                           ▼
-Normal Processing       Use Available Channels
-│                  Adaptive Mapping
-│                  Missing CH Ignored
-▼                           ▼
-└─────────────┬─────────────┘
-│
-▼
-EEG Preprocessing
-│
-▼
-EEGNet Prediction
-│
-▼
-Stress Percentage
-
----
 
 ## Model Performance Comparison
 
@@ -291,6 +247,7 @@ This project investigates the impact of different machine learning and deep lear
 ## Demonstration
 
 ### Stress Detection Example
+
 
 ### Streamlit Interface
 
