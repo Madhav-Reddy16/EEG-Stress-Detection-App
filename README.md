@@ -1,4 +1,4 @@
-# 🧠 AI-Driven Biomedical Stress Detection using Adaptive EEG Channel Processing and Deep Learning
+<img width="1440" height="1564" alt="image" src="https://github.com/user-attachments/assets/017ecfc5-328f-4448-9079-c1ae8d275837" /><img width="1440" height="1564" alt="image" src="https://github.com/user-attachments/assets/dc2cbb3b-194e-4d30-859b-45fc6dfd6256" /># 🧠 AI-Driven Biomedical Stress Detection using Adaptive EEG Channel Processing and Deep Learning
 
 ## Overview
 
@@ -37,69 +37,73 @@ Upload EEG (.edf)
 ========================================================================
                           SYSTEM ARCHITECTURE                           
 ========================================================================
-┌─────────────────────────────┐
-      EEG EDF FILE INPUT     
-     (19CH / 64CH / Others)    
-└──────────────┬──────────────┘
-               ▼
-┌─────────────────────────────┐
-      EEG DATA ACQUISITION    │
-       EDF File Reader       
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-   CHANNEL DETECTION MODULE  
-  Detects Available Channels 
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-   ADAPTIVE CHANNEL ENGINE     
-  Selects 19CH / 64CH Model   
-   Handles Missing Channels    
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-    EEG PREPROCESSING        
-  • Resampling (256 Hz)       
-  • Artifact Removal          
-  • Bandpass Filter (1-40Hz)  
-  • Notch Filter (50Hz)       
-  • Normalization             
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│    2-SECOND EPOCHING        │
-│  Fixed-Length Segmentation  │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│      EEGNET INFERENCE       │
-│   19CH / 64CH Prediction    │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│ STRESS PROBABILITY ANALYSIS │
-│   Epoch-wise Predictions    │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│   STRESS LEVEL ESTIMATION   │
-│ Normal / Moderate / High    │
-│         / Severe            │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│  STREAMLIT VISUALIZATION    │
-│ Stress % & Recommendations  │
-└─────────────────────────────┘
+ ```
++------------------------------------------+
+|         EEG EDF FILE INPUT               |
+|       (19CH / 64CH / Other Data)         |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|        EEG DATA ACQUISITION              |
+|           EDF File Reader                |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|      CHANNEL DETECTION MODULE            |
+|    Detects Available EEG Channels        |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|       ADAPTIVE CHANNEL ENGINE            |
+|  * Selects 19CH / 64CH Model             |
+|  * Handles Missing Channels              |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|          EEG PREPROCESSING               |
+|  * Resampling (Target: 256 Hz)           |
+|  * Artifact Removal                      |
+|  * Bandpass Filtering (1 - 40 Hz)        |
+|  * Notch Filtering (50 Hz)               |
+|  * Amplitude Normalisation               |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|       2-SECOND EPOCH CREATION            |
+|     Fixed-Length Segment Samples         |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|          EEGNET INFERENCE                |
+|      19CH / 64CH Model Prediction        |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|     STRESS PROBABILITY ANALYSIS          |
+|        Epoch-wise Predictions            |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|       STRESS LEVEL ESTIMATION            |
+|  Normal / Moderate / High / Severe       |
++------------------+-----------------------+
+                   |
+                   v
++------------------------------------------+
+|       STREAMLIT VISUALISATION            |
+|    Stress % & Recommendations            |
++------------------------------------------+
+
+
+
 
 =========================================================================
                         ADAPTIVE CHANNEL PIPELINE                        
