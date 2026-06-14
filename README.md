@@ -34,7 +34,7 @@ Upload EEG (.edf)
 → Stress Probability Estimation
 → Final Stress Assessment
 
-===                                                                   
+_                                                                   
                             ===    SYSTEM ARCHITECTURE             ===               
 =
  
