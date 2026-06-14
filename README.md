@@ -38,37 +38,36 @@ Upload EEG (.edf)
                           SYSTEM ARCHITECTURE                           
 ========================================================================
 ┌─────────────────────────────┐
-│      EEG EDF FILE INPUT     │
-│   (19CH / 64CH / Others)    │
+      EEG EDF FILE INPUT     
+     (19CH / 64CH / Others)    
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+      EEG DATA ACQUISITION    │
+       EDF File Reader       
 └──────────────┬──────────────┘
                │
                ▼
 ┌─────────────────────────────┐
-│     EEG DATA ACQUISITION    │
-│       EDF File Reader       │
+   CHANNEL DETECTION MODULE  
+  Detects Available Channels 
 └──────────────┬──────────────┘
                │
                ▼
 ┌─────────────────────────────┐
-│   CHANNEL DETECTION MODULE  │
-│  Detects Available Channels │
+   ADAPTIVE CHANNEL ENGINE     
+  Selects 19CH / 64CH Model   
+   Handles Missing Channels    
 └──────────────┬──────────────┘
                │
                ▼
 ┌─────────────────────────────┐
-│ ADAPTIVE CHANNEL ENGINE     │
-│ Selects 19CH / 64CH Model   │
-│ Handles Missing Channels    │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│    EEG PREPROCESSING        │
-│ • Resampling (256 Hz)       │
-│ • Artifact Removal          │
-│ • Bandpass Filter (1-40Hz)  │
-│ • Notch Filter (50Hz)       │
-│ • Normalization             │
+    EEG PREPROCESSING        
+  • Resampling (256 Hz)       
+  • Artifact Removal          
+  • Bandpass Filter (1-40Hz)  
+  • Notch Filter (50Hz)       
+  • Normalization             
 └──────────────┬──────────────┘
                │
                ▼
@@ -182,16 +181,18 @@ Upload EEG (.edf)
 
 ## Model Performance Comparison
 
-| Model       | Dataset       | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) |
-| ----------- | ------------- | ------------ | ------------- | ---------- | ------------ |
-| CNN         | Live EEG      | 50.0         | 56.0          | 50.0       | 34.0         |
-| CNN + SVM   | Live EEG      | 71.2         | 67.0          | 71.0       | 69.0         |
-| EEGNet 19CH | Live EEG      | 60.5         | 61.0          | 61.0       | 60.0         |
-| EEGNet 64CH | PhysioNet EEG | 80.7         | 80.0          | 81.0       | 80.0         |
+| Model         | Dataset       | Dataset Size    | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) |                           
+| ------------- | ------------- | --------------- | ------------ | ------------- | ---------- | ------------ |  
+| CNN           | Live EEG      | 125 Samples     | 50.0         | 56.0          | 50.0       | 34.0         |            
+| CNN + SVM     | Live EEG      | 125 Samples     | 71.2         | 67.0          | 71.0       | 69.0         |                
+| Random Forest | Live EEG      | 32 Test Samples | 78.1         | 71.4          | **93.8**   | 81.1         |       
+| EEGNet 19CH   | Live EEG      | 250 Epochs      | 60.5         | 61.0          | 61.0       | 60.0         |           
+| EEGNet 64CH   | PhysioNet EEG | 109 Subjects    | **80.7**     | **80.0**      | **81.0**   | **80.0**     |           
+
 
 Detailed results are available in:
 
-`results/model_comparison.csv`
+Results
 
 ---
 
