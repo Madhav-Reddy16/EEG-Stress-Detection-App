@@ -1,0 +1,101 @@
+# Dataset Information
+
+## Overview
+
+This project utilizes two EEG datasets for stress detection model development, evaluation, and deployment.
+
+The objective is to investigate stress-related brain activity using both controlled benchmark EEG recordings and real-world EEG recordings, enabling robust model comparison and adaptive channel processing.
+
+---
+
+## Dataset 1: Live Recorded EEG Dataset (19 Channels)
+
+### Description
+
+This dataset was collected during controlled EEG recording sessions using a 19-channel EEG acquisition system.
+
+### Recording Protocol
+
+* Resting State (Eyes Closed)
+* Cognitive Task / Focused Activity
+* Sampling frequency standardized during preprocessing
+* EEG signals segmented into 2-second epochs
+
+### Labels
+
+| Label | Condition               |
+| ----- | ----------------------- |
+| 0     | Resting / Non-Stress    |
+| 1     | Cognitive Task / Stress |
+
+### Channel Configuration
+
+FP1, FP2, F7, F3, FZ, F4, F8, T3, C3, CZ, C4, T4, T5, P3, PZ, P4, T6, O1, O2
+
+### Purpose
+
+* Real-world stress detection experimentation
+* Adaptive channel processing validation
+* Lightweight model development for deployment
+
+---
+
+## Dataset 2: PhysioNet EEG Motor Movement / Imagery Database (64 Channels)
+
+### Description
+
+A publicly available EEG dataset obtained from PhysioNet containing recordings from multiple subjects using a 64-channel EEG system.
+
+### Source
+
+PhysioNet EEG Motor Movement/Imagery Database
+
+### Characteristics
+
+* 109 subjects
+* 64 EEG channels
+* Large-scale biomedical EEG recordings
+* Standardized acquisition protocol
+
+### Purpose
+
+* Benchmark evaluation
+* Deep learning model training
+* High-density EEG analysis
+* Generalization testing across subjects
+
+---
+
+## Preprocessing Pipeline
+
+All EEG datasets undergo the following preprocessing steps:
+
+1. EEG File Loading (.EDF)
+2. Sampling Rate Detection
+3. Resampling
+4. Channel Adaptation (19CH / 64CH)
+5. Removal of Non-EEG Channels
+6. Artifact Reduction
+7. Bandpass Filtering (1–40 Hz)
+8. Notch Filtering (50 Hz)
+9. Signal Normalization
+10. 2-Second Epoch Segmentation
+11. EEGNet Model Inference
+12. Stress Probability Estimation
+
+---
+
+## Dataset Usage in This Project
+
+| Dataset           | Channels | Purpose                                      |
+| ----------------- | -------- | -------------------------------------------- |
+| Live Recorded EEG | 19CH     | Real-time stress detection and deployment    |
+| PhysioNet EEG     | 64CH     | Biomedical benchmarking and model evaluation |
+
+---
+
+## Notes
+
+* Both datasets are processed through a unified adaptive channel pipeline.
+* The deployed application automatically selects the appropriate model based on detected EEG channel availability.
+* Missing or unavailable channels are handled through adaptive channel processing to improve compatibility with real-world EEG recordings.
