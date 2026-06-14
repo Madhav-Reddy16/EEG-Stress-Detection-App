@@ -1,4 +1,4 @@
-<img width="1440" height="1564" alt="image" src="https://github.com/user-attachments/assets/017ecfc5-328f-4448-9079-c1ae8d275837" /><img width="1440" height="1564" alt="image" src="https://github.com/user-attachments/assets/dc2cbb3b-194e-4d30-859b-45fc6dfd6256" /># 🧠 AI-Driven Biomedical Stress Detection using Adaptive EEG Channel Processing and Deep Learning
+# 🧠 AI-Driven Biomedical Stress Detection using Adaptive EEG Channel Processing and Deep Learning
 
 ## Overview
 
