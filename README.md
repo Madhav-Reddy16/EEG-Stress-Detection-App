@@ -35,7 +35,7 @@ Upload EEG (.edf)
 → Final Stress Assessment
 
 ===                                                                   
-                                    SYSTEM ARCHITECTURE             ===               
+                            ===    SYSTEM ARCHITECTURE             ===               
 =
  
 <img width="1440" height="1564" alt="image" src="https://github.com/user-attachments/assets/017ecfc5-328f-4448-9079-c1ae8d275837" />
